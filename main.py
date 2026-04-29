@@ -1,39 +1,67 @@
 # Mathos - favour tracker
 
+import sqlite3
 from datetime import date
 
-favours = []
+def connect():
+    conn = sqlite3.connect("mathos.db")
+    return conn
+
+def setup():
+    conn = connect()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS favours (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            person TEXT NOT NULL,
+            description TEXT NOT NULL,
+            date TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    conn.close()
 
 def log_favour():
     person = input("Who did you do it for? ")
     description = input("What did you do? ")
-    favour = {
-        "person": person,
-        "description": description,
-        "date": date.today()
-    }
-    favours.append(favour)
-    print(f"\nLogged: {description} for {person} on {favour['date']}\n")
+    today = str(date.today())
+    conn = connect()
+    conn.execute(
+        "INSERT INTO favours (person, description, date) VALUES (?, ?, ?)",
+        (person, description, today)
+    )
+    conn.commit()
+    conn.close()
+    print(f"\nLogged: {description} for {person} on {today}\n")
 
 def show_favours():
-    if len(favours) == 0:
+    conn = connect()
+    rows = conn.execute("SELECT person, description, date FROM favours").fetchall()
+    conn.close()
+    if len(rows) == 0:
         print("\nNo favours logged yet.\n")
     else:
         print("\nAll favours:")
-        for favour in favours:
-            print(f"- {favour['date']} | {favour['person']}: {favour['description']}")
+        for row in rows:
+            print(f"- {row[2]} | {row[0]}: {row[1]}")
         print()
 
 def show_by_person():
     person = input("Which person? ")
-    results = [f for f in favours if f["person"].lower() == person.lower()]
-    if len(results) == 0:
+    conn = connect()
+    rows = conn.execute(
+        "SELECT person, description, date FROM favours WHERE LOWER(person) = LOWER(?)",
+        (person,)
+    ).fetchall()
+    conn.close()
+    if len(rows) == 0:
         print(f"\nNo favours found for {person}.\n")
     else:
         print(f"\nFavours for {person}:")
-        for favour in results:
-            print(f"- {favour['date']}: {favour['description']}")
+        for row in rows:
+            print(f"- {row[2]}: {row[1]}")
         print()
+
+setup()
 
 while True:
     print("1. Log a favour")
