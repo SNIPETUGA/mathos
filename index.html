@@ -163,22 +163,57 @@
   <!-- App screen -->
   <div id="app-screen" class="hidden">
 
-    <div class="section-title">Log a favour</div>
-    <div class="card">
-      <input type="text" id="person" placeholder="Who did you do it for?">
-      <input type="text" id="description" placeholder="What did you do?">
-      <button class="btn-primary" onclick="logFavour()">Log this favour</button>
-      <div class="msg" id="log-msg"></div>
+    <div class="tabs">
+      <button class="tab active" id="tab-favours" onclick="switchAppTab('favours')">Favours</button>
+      <button class="tab" id="tab-contacts" onclick="switchAppTab('contacts')">Contacts</button>
     </div>
 
-    <div class="section-title">All favours</div>
-    <div id="favours-list"></div>
+    <!-- Favours tab -->
+    <div id="tab-favours-content">
+      <div class="section-title">Log a favour</div>
+      <div class="card">
+        <input type="text" id="person" placeholder="Who did you do it for?">
+        <input type="text" id="description" placeholder="What did you do?">
+        <select id="category" style="width:100%;padding:12px 14px;border:0.5px solid rgba(28,28,30,0.15);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:300;background:#F5F0E8;color:#1C1C1E;outline:none;">
+          <option value="practical">🟡 Practical help</option>
+          <option value="emotional">🟤 Emotional support</option>
+          <option value="time">⚪ Time given</option>
+          <option value="other">⚫ Other</option>
+        </select>
+        <button class="btn-primary" onclick="logFavour()">Log this favour</button>
+        <div class="msg" id="log-msg"></div>
+      </div>
+
+      <div class="section-title">All favours</div>
+      <div id="favours-list"></div>
+      <div class="section-title">For me</div>
+      <div id="for-me-list"></div>
+    </div>
+
+    <!-- Contacts tab -->
+    <div id="tab-contacts-content" class="hidden">
+
+      <div class="section-title">Add a contact</div>
+      <div class="card">
+        <input type="text" id="contact-username" placeholder="Username">
+        <button class="btn-primary" onclick="sendRequest()">Send request</button>
+        <div class="msg" id="contact-msg"></div>
+      </div>
+
+      <div class="section-title">Pending requests</div>
+      <div id="pending-list"></div>
+
+      <div class="section-title">My contacts</div>
+      <div id="contacts-list"></div>
+
+    </div>
 
   </div>
 
   <script>
     const API = "http://127.0.0.1:5001"
     let currentTab = "login"
+    let currentAppTab = "favours"
 
     function switchTab(tab) {
       currentTab = tab
@@ -186,6 +221,30 @@
       document.getElementById("tab-register").classList.toggle("active", tab === "register")
       document.getElementById("auth-btn").textContent = tab === "login" ? "Log in" : "Register"
       document.getElementById("auth-msg").textContent = ""
+    }
+
+    function switchAppTab(tab) {
+      currentAppTab = tab
+      document.getElementById("tab-favours").classList.toggle("active", tab === "favours")
+      document.getElementById("tab-contacts").classList.toggle("active", tab === "contacts")
+      document.getElementById("tab-favours-content").classList.toggle("hidden", tab !== "favours")
+      document.getElementById("tab-contacts-content").classList.toggle("hidden", tab !== "contacts")
+      if (tab === "contacts") {
+        loadContacts()
+        loadPending()
+      }
+    }
+
+    function colorFromName(name) {
+      const colors = [
+        "#C9A96E", "#8A7B6A", "#A68B6E", "#7B9E87",
+        "#9E7B8A", "#6E8BA6", "#A6956E", "#7B8A9E"
+      ]
+      let hash = 0
+      for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash)
+      }
+      return colors[Math.abs(hash) % colors.length]
     }
 
     async function handleAuth() {
@@ -240,13 +299,13 @@
       document.getElementById("user-info").classList.remove("hidden")
       document.getElementById("username-display").textContent = username
       loadFavours()
+      loadForMe()
+      loadPending()
+      loadContacts()
     }
 
     async function logout() {
-      await fetch(`${API}/logout`, {
-        method: "POST",
-        credentials: "include"
-      })
+      await fetch(`${API}/logout`, { method: "POST", credentials: "include" })
       document.getElementById("auth-screen").classList.remove("hidden")
       document.getElementById("app-screen").classList.add("hidden")
       document.getElementById("user-info").classList.add("hidden")
@@ -269,9 +328,9 @@
         <div class="favour-card">
           <div class="favour-dot"></div>
           <div>
-            <div class="favour-person">${f.person}</div>
+            <div class="favour-person">To: ${f.person}</div>
             <div class="favour-desc">${f.description}</div>
-            <div class="favour-date">${f.date}</div>
+            <div class="favour-date">${f.category ? f.category + ' · ' : ''}${f.date}</div>
           </div>
         </div>
       `).join("")
@@ -280,6 +339,7 @@
     async function logFavour() {
       const person = document.getElementById("person").value.trim()
       const description = document.getElementById("description").value.trim()
+      const category = document.getElementById("category").value
       const msg = document.getElementById("log-msg")
 
       if (!person || !description) {
@@ -292,7 +352,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ person, description })
+        body: JSON.stringify({ person, description, category })
       })
 
       document.getElementById("person").value = ""
@@ -301,6 +361,124 @@
       msg.className = "msg"
       setTimeout(() => msg.textContent = "", 2000)
       loadFavours()
+      loadForMe()
+    }
+
+    async function loadForMe() {
+      const res = await fetch(`${API}/favours/for-me`, { credentials: "include" })
+      const favours = await res.json()
+      const list = document.getElementById("for-me-list")
+
+      if (favours.length === 0) {
+        list.innerHTML = '<div class="empty">Nothing logged for you yet.</div>'
+        return
+      }
+
+      list.innerHTML = favours.reverse().map(f => `
+        <div class="favour-card">
+          <div class="favour-dot" style="background:${colorFromName(f.logged_by)};"></div>
+          <div style="flex:1;">
+            <div class="favour-person">From: ${f.logged_by}</div>
+            <div class="favour-desc">${f.description}</div>
+            <div class="favour-date">${f.date}</div>
+            <div style="margin-top:8px;display:flex;gap:8px;">
+              ${f.reaction
+                ? `<span style="font-size:18px;">${f.reaction}</span>`
+                : `
+                  <button class="btn-logout" onclick="react(${f.id}, '❤️')">❤️</button>
+                  <button class="btn-logout" onclick="react(${f.id}, '🙏')">🙏</button>
+                  <button class="btn-logout" onclick="react(${f.id}, '😊')">😊</button>
+                `
+              }
+            </div>
+          </div>
+        </div>
+      `).join("")
+    }
+
+    async function react(id, reaction) {
+      const res = await fetch(`${API}/favours/${id}/react`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ reaction })
+      })
+      if (res.ok) loadForMe()
+    }
+
+    async function sendRequest() {
+      const username = document.getElementById("contact-username").value.trim()
+      const msg = document.getElementById("contact-msg")
+
+      if (!username) {
+        msg.textContent = "Please enter a username."
+        msg.className = "msg error"
+        return
+      }
+
+      const res = await fetch(`${API}/contacts/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ username })
+      })
+
+      const data = await res.json()
+      msg.textContent = data.message || data.error
+      msg.className = res.ok ? "msg" : "msg error"
+      document.getElementById("contact-username").value = ""
+      if (res.ok) loadContacts()
+    }
+
+    async function loadPending() {
+      const res = await fetch(`${API}/contacts/pending`, { credentials: "include" })
+      const pending = await res.json()
+      const list = document.getElementById("pending-list")
+
+      if (pending.length === 0) {
+        list.innerHTML = '<div class="empty">No pending requests.</div>'
+        return
+      }
+
+      list.innerHTML = pending.map(p => `
+        <div class="favour-card">
+          <div class="favour-dot" style="background:#8A7B6A;"></div>
+          <div style="flex:1;">
+            <div class="favour-person">${p.username}</div>
+            <div class="favour-desc">wants to connect</div>
+          </div>
+          <button class="btn-logout" onclick="acceptRequest(${p.id})">Accept</button>
+        </div>
+      `).join("")
+    }
+
+    async function acceptRequest(id) {
+      await fetch(`${API}/contacts/accept/${id}`, {
+        method: "POST",
+        credentials: "include"
+      })
+      loadPending()
+      loadContacts()
+    }
+
+    async function loadContacts() {
+      const res = await fetch(`${API}/contacts`, { credentials: "include" })
+      const contacts = await res.json()
+      const list = document.getElementById("contacts-list")
+
+      if (contacts.length === 0) {
+        list.innerHTML = '<div class="empty">No contacts yet.</div>'
+        return
+      }
+
+      list.innerHTML = contacts.map(c => `
+        <div class="favour-card">
+          <div class="favour-dot" style="background:${colorFromName(c.username)};"></div>
+          <div>
+            <div class="favour-person">${c.username}</div>
+          </div>
+        </div>
+      `).join("")
     }
   </script>
 

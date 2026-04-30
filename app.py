@@ -107,11 +107,12 @@ def log_favour():
     data = request.get_json()
     person = data["person"]
     description = data["description"]
+    category = data.get("category", "other")
     today = str(date.today())
     conn = connect()
     conn.execute(
-        "INSERT INTO favours (user_id, person, description, date) VALUES (?, ?, ?, ?)",
-        (session["user_id"], person, description, today)
+        "INSERT INTO favours (user_id, person, description, date, category) VALUES (?, ?, ?, ?, ?)",
+        (session["user_id"], person, description, today, category)
     )
     conn.commit()
     conn.close()
@@ -204,6 +205,37 @@ def get_contacts():
         WHERE (contacts.requester_id = ? OR contacts.receiver_id = ?)
         AND contacts.status = 'accepted'
     """, (session["user_id"], session["user_id"], session["user_id"])).fetchall()
+    conn.close()
+    return jsonify([dict(row) for row in rows])
+
+@app.route("/favours/<int:favour_id>/react", methods=["POST"])
+def react_to_favour(favour_id):
+    if "user_id" not in session:
+        return jsonify({"error": "Not logged in"}), 401
+    data = request.get_json()
+    reaction = data["reaction"]
+    if reaction not in ["❤️", "🙏", "😊"]:
+        return jsonify({"error": "Invalid reaction"}), 400
+    conn = connect()
+    conn.execute(
+        "UPDATE favours SET reaction = ? WHERE id = ? AND person = ?",
+        (reaction, favour_id, session["username"])
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"message": "Reaction added"}), 200
+
+@app.route("/favours/for-me", methods=["GET"])
+def favours_for_me():
+    if "user_id" not in session:
+        return jsonify({"error": "Not logged in"}), 401
+    conn = connect()
+    rows = conn.execute("""
+        SELECT favours.*, users.username as logged_by
+        FROM favours
+        JOIN users ON favours.user_id = users.id
+        WHERE LOWER(favours.person) = LOWER(?)
+    """, (session["username"],)).fetchall()
     conn.close()
     return jsonify([dict(row) for row in rows])
 
