@@ -338,15 +338,16 @@
       }
 
       list.innerHTML = favours.reverse().map(f => `
-        <div class="favour-card">
-          <div class="favour-dot"></div>
-          <div>
-            <div class="favour-person">To: ${f.person}</div>
-            <div class="favour-desc">${f.description}</div>
-            <div class="favour-date">${f.category ? f.category + ' · ' : ''}${f.date}</div>
+          <div class="favour-card">
+            <div class="favour-dot"></div>
+            <div style="flex:1;">
+              <div class="favour-person">To: ${f.person}</div>
+              <div class="favour-desc">${f.description}</div>
+              <div class="favour-date">${f.category ? f.category + ' · ' : ''}${f.date}</div>
+              ${f.reaction ? `<div style="margin-top:6px;font-size:18px;">${f.reaction}</div>` : ''}
+            </div>
           </div>
-        </div>
-      `).join("")
+        `).join("")
     }
 
     async function logFavour() {
